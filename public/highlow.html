@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>High / Low</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #122037; color: #f5f7fa; margin: 0; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; background: #1f3554; padding: 20px; border-radius: 10px; box-shadow: 0 0 12px rgba(0,0,0,0.5); }
+    h1 { text-align: center; }
+    .info { text-align: center; margin-bottom: 20px; }
+    .card { font-size: 4rem; text-align: center; margin: 20px 0; }
+    .controls { display: grid; gap: 12px; }
+    button { padding: 10px; border: none; border-radius: 6px; background: #ffb347; color: #122037; font-weight: bold; cursor: pointer; }
+    button:disabled { background: #666; cursor: not-allowed; }
+    input { padding: 8px; border-radius: 6px; border: none; }
+    .guess-buttons { display: flex; gap: 10px; }
+    .result { min-height: 1.5em; text-align: center; margin-top: 15px; }
+    .error { color: #ff6b6b; }
+    .back { text-align: center; margin-top: 20px; }
+    .back a { color: #9be7ff; text-decoration: none; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>High / Low</h1>
+    <div class="info">
+      <div id="playerInfo">Loading...</div>
+      <div id="balance">Balance: --</div>
+    </div>
+    <div class="card" id="currentCard">?</div>
+    <div class="controls">
+      <label for="wager">Wager Amount</label>
+      <input type="number" id="wager" min="1" value="50" />
+      <div class="guess-buttons">
+        <button id="higherBtn" data-guess="higher" disabled>Higher</button>
+        <button id="lowerBtn" data-guess="lower" disabled>Lower</button>
+      </div>
+      <button id="playBtn" disabled>Place Bet</button>
+    </div>
+    <div class="result" id="result"></div>
+    <div class="back"><a id="backLink" href="lobby.html">Back to Lobby</a></div>
+  </div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const username = params.get('u');
+    const playerInfo = document.getElementById('playerInfo');
+    const balanceEl = document.getElementById('balance');
+    const currentCardEl = document.getElementById('currentCard');
+    const wagerInput = document.getElementById('wager');
+    const playBtn = document.getElementById('playBtn');
+    const guessButtons = document.querySelectorAll('.guess-buttons button');
+    const resultEl = document.getElementById('result');
+    let balance = 0;
+    let currentCard = null;
+    let selectedGuess = null;
+
+    if (!username) {
+      window.location.replace('lobby.html');
+    } else {
+      document.getElementById('backLink').href = `lobby.html?u=${encodeURIComponent(username)}`;
+      loadProfile();
+    }
+
+    guessButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedGuess = btn.dataset.guess;
+        guessButtons.forEach(b => b.disabled = false);
+        btn.disabled = true;
+      });
+    });
+
+    playBtn.addEventListener('click', async () => {
+      const wager = parseInt(wagerInput.value, 10) || 0;
+      if (!selectedGuess) {
+        resultEl.innerHTML = '<span class="error">Choose higher or lower.</span>';
+        return;
+      }
+      if (wager <= 0) {
+        resultEl.innerHTML = '<span class="error">Enter a valid wager.</span>';
+        return;
+      }
+      if (wager > balance) {
+        resultEl.innerHTML = '<span class="error">Not enough credits.</span>';
+        return;
+      }
+      if (currentCard === null) {
+        resultEl.innerHTML = '<span class="error">Card not ready.</span>';
+        return;
+      }
+
+      playBtn.disabled = true;
+      resultEl.textContent = 'Drawing...';
+
+      try {
+        const chargeResp = await fetch('/api/game/charge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, game: 'highlow', amount: wager, desc: `bet ${wager} credits on ${selectedGuess}` })
+        });
+        const chargeData = await chargeResp.json();
+        if (!chargeData.ok) {
+          if (chargeData.error === 'INSUFFICIENT_FUNDS') {
+            balance = chargeData.balance;
+            updateBalance();
+            resultEl.innerHTML = '<span class="error">Insufficient funds.</span>';
+          } else {
+            resultEl.innerHTML = '<span class="error">Bet failed.</span>';
+          }
+          playBtn.disabled = false;
+          return;
+        }
+        balance = chargeData.balance;
+        updateBalance();
+
+        const nextCard = drawCard();
+        const comparison = compareCards(nextCard, currentCard);
+        let winnings = 0;
+        if (comparison === 0) {
+          winnings = wager;
+          resultEl.textContent = `It's a tie! Card was ${cardName(nextCard)}. Bet returned.`;
+        } else if ((comparison > 0 && selectedGuess === 'higher') || (comparison < 0 && selectedGuess === 'lower')) {
+          winnings = wager * 2;
+          resultEl.textContent = `You guessed right! Next card ${cardName(nextCard)}.`;
+        } else {
+          resultEl.textContent = `Wrong guess. Next card ${cardName(nextCard)}.`;
+        }
+        currentCard = nextCard;
+        updateCardDisplay();
+
+        if (winnings > 0) {
+          const payoutResp = await fetch('/api/game/payout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, game: 'highlow', amount: winnings, desc: `payout ${winnings} credits on ${selectedGuess}` })
+          });
+          const payoutData = await payoutResp.json();
+          if (payoutData.ok) {
+            balance = payoutData.balance;
+            updateBalance();
+          } else {
+            resultEl.innerHTML = '<span class="error">Payout failed.</span>';
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        resultEl.innerHTML = '<span class="error">An error occurred.</span>';
+      } finally {
+        playBtn.disabled = false;
+      }
+    });
+
+    function drawCard() {
+      return Math.floor(Math.random() * 13) + 1;
+    }
+
+    function compareCards(a, b) {
+      if (a === b) return 0;
+      return a > b ? 1 : -1;
+    }
+
+    function cardName(value) {
+      const names = {
+        1: 'Ace',
+        11: 'Jack',
+        12: 'Queen',
+        13: 'King'
+      };
+      return names[value] || value;
+    }
+
+    function updateCardDisplay() {
+      currentCardEl.textContent = cardName(currentCard);
+    }
+
+    function updateBalance() {
+      balanceEl.textContent = `Balance: ${balance} credits`;
+    }
+
+    async function loadProfile() {
+      try {
+        const resp = await fetch(`/api/profile?username=${encodeURIComponent(username)}`);
+        const data = await resp.json();
+        if (!data.ok) {
+          throw new Error(data.error || 'Failed to load profile');
+        }
+        balance = data.balance;
+        playerInfo.textContent = `Player: ${data.username}`;
+        updateBalance();
+        currentCard = drawCard();
+        updateCardDisplay();
+        playBtn.disabled = false;
+        guessButtons.forEach(btn => btn.disabled = false);
+      } catch (err) {
+        console.error(err);
+        playerInfo.innerHTML = '<span class="error">Unable to load profile.</span>';
+      }
+    }
+  </script>
+</body>
+</html>

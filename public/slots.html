@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Slot Machine</title>
+  <style>
+    body { font-family: 'Trebuchet MS', sans-serif; background: #1b2735; color: #f7f7f7; margin: 0; padding: 20px; }
+    .container { max-width: 700px; margin: 0 auto; background: #24354b; padding: 20px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
+    h1 { text-align: center; margin-bottom: 10px; }
+    .info { text-align: center; margin-bottom: 20px; }
+    .reels { display: flex; justify-content: center; gap: 20px; font-size: 3rem; margin: 20px 0; }
+    .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    label { display: block; margin-bottom: 4px; }
+    input { padding: 8px; border-radius: 6px; border: none; width: 100%; }
+    button { grid-column: span 2; padding: 12px; border: none; border-radius: 6px; background: #ffcc00; color: #222; font-weight: bold; cursor: pointer; }
+    button:disabled { background: #777; cursor: not-allowed; }
+    .result { text-align: center; min-height: 1.5em; margin-top: 20px; }
+    .back { margin-top: 20px; text-align: center; }
+    .back a { color: #9be7ff; text-decoration: none; font-weight: bold; }
+    .error { color: #ff6b6b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Slot Machine</h1>
+    <div class="info">
+      <div id="playerInfo">Loading...</div>
+      <div id="balance">Balance: --</div>
+    </div>
+    <div class="reels" id="reels">
+      <div>❔</div>
+      <div>❔</div>
+      <div>❔</div>
+    </div>
+    <div class="controls">
+      <div>
+        <label for="betPerLine">Bet per Line</label>
+        <input type="number" id="betPerLine" min="1" value="10" />
+      </div>
+      <div>
+        <label for="lines">Number of Lines</label>
+        <input type="number" id="lines" min="1" max="5" value="1" />
+      </div>
+      <button id="spinBtn" disabled>Spin</button>
+    </div>
+    <div class="result" id="result"></div>
+    <div class="back"><a id="backLink" href="lobby.html">Back to Lobby</a></div>
+  </div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const username = params.get('u');
+    const playerInfo = document.getElementById('playerInfo');
+    const balanceEl = document.getElementById('balance');
+    const reelsEl = document.getElementById('reels');
+    const resultEl = document.getElementById('result');
+    const spinBtn = document.getElementById('spinBtn');
+    const betInput = document.getElementById('betPerLine');
+    const linesInput = document.getElementById('lines');
+
+    const symbols = ['🍒', '🍋', '🔔', '⭐', '7'];
+    let balance = 0;
+
+    if (!username) {
+      window.location.replace('lobby.html');
+    } else {
+      document.getElementById('backLink').href = `lobby.html?u=${encodeURIComponent(username)}`;
+      loadProfile();
+    }
+
+    async function loadProfile() {
+      try {
+        const resp = await fetch(`/api/profile?username=${encodeURIComponent(username)}`);
+        const data = await resp.json();
+        if (!data.ok) {
+          throw new Error(data.error || 'Failed to load profile');
+        }
+        balance = data.balance;
+        playerInfo.textContent = `Player: ${data.username}`;
+        updateBalance();
+        spinBtn.disabled = false;
+      } catch (err) {
+        console.error(err);
+        playerInfo.innerHTML = '<span class="error">Unable to load profile.</span>';
+      }
+    }
+
+    function updateBalance() {
+      balanceEl.textContent = `Balance: ${balance} credits`;
+    }
+
+    function randomSymbol() {
+      return symbols[Math.floor(Math.random() * symbols.length)];
+    }
+
+    function evaluatePayout(reelValues, totalBet) {
+      const [a, b, c] = reelValues;
+      if (a === b && b === c) {
+        if (a === '7') return totalBet * 5;
+        return totalBet * 3;
+      }
+      if (a === b || b === c || a === c) {
+        return Math.floor(totalBet * 1.5);
+      }
+      return 0;
+    }
+
+    async function charge(amount, desc) {
+      const resp = await fetch('/api/game/charge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, game: 'slots', amount, desc })
+      });
+      return resp.json();
+    }
+
+    async function payout(amount, desc) {
+      const resp = await fetch('/api/game/payout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, game: 'slots', amount, desc })
+      });
+      return resp.json();
+    }
+
+    spinBtn.addEventListener('click', async () => {
+      const betPerLine = parseInt(betInput.value, 10) || 0;
+      const lines = parseInt(linesInput.value, 10) || 0;
+      const totalBet = betPerLine * lines;
+
+      if (betPerLine <= 0 || lines <= 0) {
+        resultEl.innerHTML = '<span class="error">Please enter valid bet and lines.</span>';
+        return;
+      }
+      if (totalBet > balance) {
+        resultEl.innerHTML = '<span class="error">Not enough credits for that spin.</span>';
+        return;
+      }
+
+      spinBtn.disabled = true;
+      resultEl.textContent = 'Spinning...';
+
+      try {
+        const chargeResp = await charge(totalBet, `bet ${totalBet} credits on ${lines} lines`);
+        if (!chargeResp.ok) {
+          if (chargeResp.error === 'INSUFFICIENT_FUNDS') {
+            balance = chargeResp.balance;
+            updateBalance();
+            resultEl.innerHTML = '<span class="error">Insufficient funds.</span>';
+          } else {
+            resultEl.innerHTML = '<span class="error">Charge failed.</span>';
+          }
+          spinBtn.disabled = false;
+          return;
+        }
+        balance = chargeResp.balance;
+        updateBalance();
+
+        const reelValues = [randomSymbol(), randomSymbol(), randomSymbol()];
+        reelsEl.innerHTML = reelValues.map(v => `<div>${v}</div>`).join('');
+
+        const winnings = evaluatePayout(reelValues, totalBet);
+        if (winnings > 0) {
+          const payoutResp = await payout(winnings, `payout ${winnings} credits for ${reelValues.join(' ')}`);
+          if (payoutResp.ok) {
+            balance = payoutResp.balance;
+            updateBalance();
+            resultEl.textContent = `You won ${winnings} credits!`;
+          } else {
+            resultEl.innerHTML = '<span class="error">Payout failed.</span>';
+          }
+        } else {
+          resultEl.textContent = `Lost ${totalBet} credits.`;
+        }
+      } catch (err) {
+        console.error(err);
+        resultEl.innerHTML = '<span class="error">An error occurred.</span>';
+      } finally {
+        spinBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
