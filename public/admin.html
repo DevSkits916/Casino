@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #0f1e2f; color: #f4f4f4; margin: 0; padding: 20px; }
+    h1 { text-align: center; }
+    .layout { display: flex; gap: 20px; }
+    .panel { flex: 1; background: #172c44; padding: 20px; border-radius: 8px; box-shadow: 0 0 12px rgba(0,0,0,0.4); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    tr:hover { background: rgba(255,255,255,0.05); cursor: pointer; }
+    .history { max-height: 400px; overflow-y: auto; }
+    .history-entry { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .controls { margin-top: 15px; display: grid; gap: 10px; }
+    input, textarea { padding: 8px; border-radius: 4px; border: none; }
+    button { padding: 10px; border: none; border-radius: 4px; background: #ffb347; color: #0f1e2f; font-weight: bold; cursor: pointer; }
+    button:disabled { background: #555; cursor: not-allowed; }
+    .status { margin-top: 10px; min-height: 1.4em; }
+    .error { color: #ff6b6b; }
+  </style>
+</head>
+<body>
+  <h1>Admin Dashboard</h1>
+  <div class="layout">
+    <div class="panel">
+      <h2>Users</h2>
+      <table id="usersTable">
+        <thead>
+          <tr><th>Username</th><th>Balance</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="panel" id="detailPanel">
+      <h2>User Detail</h2>
+      <div id="detailContent">Select a user to view details.</div>
+    </div>
+  </div>
+  <script>
+    const usersTableBody = document.querySelector('#usersTable tbody');
+    const detailContent = document.getElementById('detailContent');
+    let selectedUser = null;
+
+    async function fetchUsers() {
+      try {
+        const resp = await fetch('/api/admin/users');
+        const data = await resp.json();
+        if (!data.ok) throw new Error('Failed to load users');
+        renderUsers(data.users);
+      } catch (err) {
+        console.error(err);
+        usersTableBody.innerHTML = '<tr><td colspan="2" class="error">Unable to load users.</td></tr>';
+      }
+    }
+
+    function renderUsers(users) {
+      usersTableBody.innerHTML = '';
+      users.forEach(user => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${user.username}</td><td>${user.balance}</td>`;
+        tr.addEventListener('click', () => selectUser(user.username));
+        usersTableBody.appendChild(tr);
+      });
+    }
+
+    async function selectUser(username) {
+      selectedUser = username;
+      detailContent.innerHTML = 'Loading...';
+      try {
+        const resp = await fetch(`/api/admin/user-detail?username=${encodeURIComponent(username)}`);
+        const data = await resp.json();
+        if (!data.ok) throw new Error('Failed to load detail');
+        renderDetail(data);
+      } catch (err) {
+        console.error(err);
+        detailContent.innerHTML = '<div class="error">Unable to load detail.</div>';
+      }
+    }
+
+    function renderDetail(detail) {
+      const historyHtml = detail.history.length
+        ? detail.history.slice().reverse().map(entry => `
+            <div class="history-entry">
+              <div><strong>${entry.game}</strong> (${entry.delta >= 0 ? '+' : ''}${entry.delta})</div>
+              <div>${entry.desc}</div>
+              <div style="font-size:0.8em; color:#9be7ff;">${entry.ts}</div>
+            </div>
+          `).join('')
+        : '<div>No history yet.</div>';
+
+      detailContent.innerHTML = `
+        <div><strong>Username:</strong> ${detail.username}</div>
+        <div><strong>Balance:</strong> ${detail.balance} credits</div>
+        <div class="controls">
+          <label>Set Balance</label>
+          <input type="number" id="balanceInput" value="${detail.balance}" />
+          <textarea id="noteInput" rows="2" placeholder="Adjustment note"></textarea>
+          <button id="setBalanceBtn">Set Balance</button>
+          <button id="deleteUserBtn" style="background:#ff6b6b; color:#fff;">Delete User</button>
+          <div class="status" id="detailStatus"></div>
+        </div>
+        <h3>History</h3>
+        <div class="history">${historyHtml}</div>
+      `;
+
+      document.getElementById('setBalanceBtn').addEventListener('click', onSetBalance);
+      document.getElementById('deleteUserBtn').addEventListener('click', onDeleteUser);
+    }
+
+    async function onSetBalance() {
+      const balanceInput = document.getElementById('balanceInput');
+      const noteInput = document.getElementById('noteInput');
+      const statusEl = document.getElementById('detailStatus');
+      const balanceValue = parseInt(balanceInput.value, 10);
+      if (Number.isNaN(balanceValue) || balanceValue < 0) {
+        statusEl.innerHTML = '<span class="error">Enter a valid balance.</span>';
+        return;
+      }
+      try {
+        statusEl.textContent = 'Saving...';
+        const resp = await fetch('/api/admin/set-balance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: selectedUser, balance: balanceValue, note: noteInput.value })
+        });
+        const data = await resp.json();
+        if (!data.ok) throw new Error('Failed to set balance');
+        statusEl.textContent = 'Balance updated.';
+        fetchUsers();
+        selectUser(selectedUser);
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Unable to set balance.</span>';
+      }
+    }
+
+    async function onDeleteUser() {
+      if (!confirm('Delete this user? This cannot be undone.')) {
+        return;
+      }
+      const statusEl = document.getElementById('detailStatus');
+      try {
+        statusEl.textContent = 'Deleting...';
+        const resp = await fetch('/api/admin/delete-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: selectedUser })
+        });
+        const data = await resp.json();
+        if (!data.ok) throw new Error('Failed to delete user');
+        statusEl.textContent = 'User deleted.';
+        selectedUser = null;
+        detailContent.innerHTML = 'Select a user to view details.';
+        fetchUsers();
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Unable to delete user.</span>';
+      }
+    }
+
+    fetchUsers();
+  </script>
+</body>
+</html>

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Casino Lobby</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #0b1c2c; color: #f0f4f8; margin: 0; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; background: #132f4c; padding: 20px; border-radius: 8px; box-shadow: 0 0 12px rgba(0,0,0,0.4); }
+    h1 { text-align: center; }
+    label, input, button { display: block; width: 100%; margin-bottom: 12px; }
+    input { padding: 8px; border-radius: 4px; border: none; }
+    button { padding: 10px; border: none; border-radius: 4px; background: #ffb347; color: #0b1c2c; font-weight: bold; cursor: pointer; }
+    button:disabled { background: #555; cursor: not-allowed; }
+    .balance { font-size: 1.5em; text-align: center; margin: 20px 0; }
+    .games button { margin-top: 10px; }
+    .status { min-height: 1.2em; margin-top: 10px; text-align: center; }
+    .actions { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Casino Lobby</h1>
+    <label for="username">Enter Username</label>
+    <input type="text" id="username" placeholder="e.g. luckyplayer" />
+    <button id="loadBtn">Load Profile</button>
+    <div class="balance" id="balanceDisplay">Balance: -- credits</div>
+    <div class="games">
+      <button data-game="slots" disabled>Play Slots</button>
+      <button data-game="highlow" disabled>Play High / Low</button>
+      <button data-game="coinflip" disabled>Play Coin Flip</button>
+    </div>
+    <div class="actions">
+      <button id="saveBtn" disabled>Save &amp; Exit</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+  <script>
+    const statusEl = document.getElementById('status');
+    const balanceDisplay = document.getElementById('balanceDisplay');
+    const loadBtn = document.getElementById('loadBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const gameButtons = document.querySelectorAll('.games button');
+    const usernameInput = document.getElementById('username');
+    let currentUser = null;
+    let currentBalance = 0;
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message || '';
+      statusEl.style.color = isError ? '#ff6b6b' : '#9be7ff';
+    }
+
+    function updateBalanceDisplay() {
+      if (currentUser) {
+        balanceDisplay.textContent = `Balance: ${currentBalance} credits`;
+      } else {
+        balanceDisplay.textContent = 'Balance: -- credits';
+      }
+    }
+
+    function setButtonsEnabled(enabled) {
+      gameButtons.forEach(btn => btn.disabled = !enabled);
+      saveBtn.disabled = !enabled;
+    }
+
+    async function loadProfile(username) {
+      const trimmed = (username || '').trim();
+      if (!trimmed) {
+        setStatus('Please enter a username.', true);
+        return;
+      }
+      try {
+        setStatus('Loading profile...');
+        const resp = await fetch(`/api/profile?username=${encodeURIComponent(trimmed)}`);
+        const data = await resp.json();
+        if (!data.ok) {
+          throw new Error(data.error || 'Failed to load profile');
+        }
+        currentUser = data.username;
+        currentBalance = data.balance;
+        updateBalanceDisplay();
+        setButtonsEnabled(true);
+        setStatus(`Welcome back, ${currentUser}!`);
+      } catch (err) {
+        console.error(err);
+        setStatus('Error loading profile.', true);
+      }
+    }
+
+    loadBtn.addEventListener('click', () => {
+      loadProfile(usernameInput.value);
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      if (!currentUser) return;
+      try {
+        setStatus('Saving profile...');
+        const resp = await fetch('/api/profile/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: currentUser, balance: currentBalance })
+        });
+        const data = await resp.json();
+        if (!data.ok) {
+          throw new Error(data.error || 'Failed to save');
+        }
+        setStatus('Profile saved.');
+      } catch (err) {
+        console.error(err);
+        setStatus('Error saving profile.', true);
+      }
+    });
+
+    gameButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!currentUser) return;
+        const game = btn.getAttribute('data-game');
+        window.location.href = `${game}.html?u=${encodeURIComponent(currentUser)}`;
+      });
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    const preset = params.get('u');
+    if (preset) {
+      usernameInput.value = preset;
+      loadProfile(preset);
+    }
+  </script>
+</body>
+</html>

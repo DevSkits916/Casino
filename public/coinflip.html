@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Coin Flip</title>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; background: #101d2d; color: #f5f5f5; margin: 0; padding: 20px; }
+    .container { max-width: 500px; margin: 0 auto; background: #182c44; padding: 20px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
+    h1 { text-align: center; }
+    .info { text-align: center; margin-bottom: 20px; }
+    .coin { font-size: 5rem; text-align: center; margin: 20px 0; }
+    .controls { display: grid; gap: 12px; }
+    input { padding: 8px; border-radius: 6px; border: none; }
+    button { padding: 10px; border: none; border-radius: 6px; background: #ffb347; color: #101d2d; font-weight: bold; cursor: pointer; }
+    button:disabled { background: #666; cursor: not-allowed; }
+    .choice-buttons { display: flex; gap: 10px; justify-content: center; }
+    .result { text-align: center; min-height: 1.5em; margin-top: 15px; }
+    .error { color: #ff6b6b; }
+    .back { text-align: center; margin-top: 20px; }
+    .back a { color: #9be7ff; text-decoration: none; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Coin Flip</h1>
+    <div class="info">
+      <div id="playerInfo">Loading...</div>
+      <div id="balance">Balance: --</div>
+    </div>
+    <div class="coin" id="coinFace">🪙</div>
+    <div class="controls">
+      <label for="wager">Wager Amount</label>
+      <input type="number" id="wager" min="1" value="50" />
+      <div class="choice-buttons">
+        <button data-choice="heads" id="headsBtn" disabled>Heads</button>
+        <button data-choice="tails" id="tailsBtn" disabled>Tails</button>
+      </div>
+      <button id="flipBtn" disabled>Flip Coin</button>
+    </div>
+    <div class="result" id="result"></div>
+    <div class="back"><a id="backLink" href="lobby.html">Back to Lobby</a></div>
+  </div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const username = params.get('u');
+    const playerInfo = document.getElementById('playerInfo');
+    const balanceEl = document.getElementById('balance');
+    const coinFace = document.getElementById('coinFace');
+    const wagerInput = document.getElementById('wager');
+    const resultEl = document.getElementById('result');
+    const flipBtn = document.getElementById('flipBtn');
+    const choiceButtons = document.querySelectorAll('.choice-buttons button');
+    let balance = 0;
+    let choice = null;
+
+    if (!username) {
+      window.location.replace('lobby.html');
+    } else {
+      document.getElementById('backLink').href = `lobby.html?u=${encodeURIComponent(username)}`;
+      loadProfile();
+    }
+
+    choiceButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        choice = btn.dataset.choice;
+        choiceButtons.forEach(b => b.disabled = false);
+        btn.disabled = true;
+      });
+    });
+
+    flipBtn.addEventListener('click', async () => {
+      const wager = parseInt(wagerInput.value, 10) || 0;
+      if (!choice) {
+        resultEl.innerHTML = '<span class="error">Choose heads or tails.</span>';
+        return;
+      }
+      if (wager <= 0) {
+        resultEl.innerHTML = '<span class="error">Enter a valid wager.</span>';
+        return;
+      }
+      if (wager > balance) {
+        resultEl.innerHTML = '<span class="error">Not enough credits.</span>';
+        return;
+      }
+
+      flipBtn.disabled = true;
+      resultEl.textContent = 'Flipping...';
+
+      try {
+        const chargeResp = await fetch('/api/game/charge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, game: 'coinflip', amount: wager, desc: `bet ${wager} credits on ${choice}` })
+        });
+        const chargeData = await chargeResp.json();
+        if (!chargeData.ok) {
+          if (chargeData.error === 'INSUFFICIENT_FUNDS') {
+            balance = chargeData.balance;
+            updateBalance();
+            resultEl.innerHTML = '<span class="error">Insufficient funds.</span>';
+          } else {
+            resultEl.innerHTML = '<span class="error">Bet failed.</span>';
+          }
+          flipBtn.disabled = false;
+          return;
+        }
+        balance = chargeData.balance;
+        updateBalance();
+
+        const outcome = Math.random() < 0.5 ? 'heads' : 'tails';
+        coinFace.textContent = outcome === 'heads' ? '🙂' : '☠️';
+
+        if (outcome === choice) {
+          const winnings = wager * 2;
+          resultEl.textContent = `You won! It was ${outcome.toUpperCase()}.`;
+          const payoutResp = await fetch('/api/game/payout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, game: 'coinflip', amount: winnings, desc: `payout ${winnings} credits for ${outcome}` })
+          });
+          const payoutData = await payoutResp.json();
+          if (payoutData.ok) {
+            balance = payoutData.balance;
+            updateBalance();
+          } else {
+            resultEl.innerHTML = '<span class="error">Payout failed.</span>';
+          }
+        } else {
+          resultEl.textContent = `You lost. It was ${outcome.toUpperCase()}.`;
+        }
+      } catch (err) {
+        console.error(err);
+        resultEl.innerHTML = '<span class="error">An error occurred.</span>';
+      } finally {
+        flipBtn.disabled = false;
+      }
+    });
+
+    async function loadProfile() {
+      try {
+        const resp = await fetch(`/api/profile?username=${encodeURIComponent(username)}`);
+        const data = await resp.json();
+        if (!data.ok) {
+          throw new Error(data.error || 'Failed to load profile');
+        }
+        balance = data.balance;
+        playerInfo.textContent = `Player: ${data.username}`;
+        updateBalance();
+        flipBtn.disabled = false;
+        choiceButtons.forEach(btn => btn.disabled = false);
+      } catch (err) {
+        console.error(err);
+        playerInfo.innerHTML = '<span class="error">Unable to load profile.</span>';
+      }
+    }
+
+    function updateBalance() {
+      balanceEl.textContent = `Balance: ${balance} credits`;
+    }
+  </script>
+</body>
+</html>
