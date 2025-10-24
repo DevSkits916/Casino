@@ -7,9 +7,26 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const DATA_FILE = path.join(__dirname, 'balances.json');
+const DEFAULT_DATA_FILE = path.join(__dirname, 'balances.json');
+const DATA_FILE = (() => {
+  const configured = process.env.DATA_FILE;
+  if (!configured) {
+    return DEFAULT_DATA_FILE;
+  }
+  return path.isAbsolute(configured)
+    ? configured
+    : path.join(__dirname, configured);
+})();
+
+function ensureDataDirectory() {
+  const dir = path.dirname(DATA_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
 
 function loadData() {
+  ensureDataDirectory();
   if (!fs.existsSync(DATA_FILE)) {
     const initial = { players: {} };
     fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2));
@@ -30,7 +47,10 @@ function loadData() {
 
 let data = loadData();
 
+console.log(`Using balance data file at ${DATA_FILE}`);
+
 function saveData() {
+  ensureDataDirectory();
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 

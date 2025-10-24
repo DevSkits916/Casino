@@ -33,12 +33,42 @@ You can use `curl` or any REST client to interact with the API. Example to fetch
 curl "http://localhost:3000/api/profile?username=demo"
 ```
 
+## Deployment
+
+### Deploying to Render
+The repository includes a [`render.yaml`](./render.yaml) blueprint that provisions a Render web service with a persistent disk for the wallet data file. To deploy:
+
+1. Push this repository to your own Git provider (GitHub, GitLab, etc.).
+2. Log in to [Render](https://render.com) and select **New > Blueprint**.
+3. Provide the repository URL and, when prompted, confirm the settings from `render.yaml` (service name, Node runtime, and disk size). You can adjust the region or service name if needed.
+4. Render will run `npm install` during the build step and start the service with `npm start`.
+
+The blueprint configures an environment variable `DATA_FILE=/var/data/balances.json` and attaches a 1&nbsp;GB persistent disk mounted at `/var/data`. This ensures wallet balances survive restarts and deploys.
+
+#### Manual setup without the blueprint
+If you prefer to create the service manually:
+
+1. Create a new **Web Service** from your repository.
+2. Set **Runtime** to Node and **Build Command** to `npm install`, **Start Command** to `npm start`.
+3. Add an environment variable `DATA_FILE` pointing to a location on a persistent disk (for example `/var/data/balances.json`).
+4. Attach a persistent disk mounted at the directory that contains the data file (e.g. mount `/var/data`).
+
+### Configuring the data store location
+Locally the server writes to `balances.json` in the project root. You can override the path by setting the `DATA_FILE` environment variable before starting the server:
+
+```bash
+DATA_FILE=./tmp/custom-balances.json npm start
+```
+
+Relative paths are resolved against the project directory; absolute paths are used as-is. The server will create any missing directories in the path.
+
 ## Project Structure
 ```
 ├── balances.json        # Persistent player balance store
 ├── public/              # Frontend pages (lobby, games, admin)
 ├── server.js            # Express server and API routes
 ├── package.json         # Node.js project metadata and scripts
+├── render.yaml          # Render blueprint for automated deployment
 └── README.md            # Project documentation (this file)
 ```
 
