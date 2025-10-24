@@ -1,0 +1,26 @@
+{
+  "players": {
+    "alice": {
+      "balance": 1200,
+      "history": [
+        {
+          "ts": "2023-10-01T12:00:00.000Z",
+          "game": "slots",
+          "delta": 200,
+          "desc": "initial bonus"
+        }
+      ]
+    },
+    "bob": {
+      "balance": 800,
+      "history": [
+        {
+          "ts": "2023-10-02T15:30:00.000Z",
+          "game": "highlow",
+          "delta": -200,
+          "desc": "bet on lower"
+        }
+      ]
+    }
+  }
+}
