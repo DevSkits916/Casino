@@ -2,63 +2,149 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Casino Lobby</title>
+  <title>Arcade Lobby</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #0b1c2c; color: #f0f4f8; margin: 0; padding: 20px; }
-    .container { max-width: 600px; margin: 0 auto; background: #132f4c; padding: 20px; border-radius: 8px; box-shadow: 0 0 12px rgba(0,0,0,0.4); }
-    h1 { text-align: center; }
-    label, input, button { display: block; width: 100%; margin-bottom: 12px; }
-    input { padding: 8px; border-radius: 4px; border: none; }
-    button { padding: 10px; border: none; border-radius: 4px; background: #ffb347; color: #0b1c2c; font-weight: bold; cursor: pointer; }
-    button:disabled { background: #555; cursor: not-allowed; }
-    .balance { font-size: 1.5em; text-align: center; margin: 20px 0; }
-    .games button { margin-top: 10px; }
-    .status { min-height: 1.2em; margin-top: 10px; text-align: center; }
-    .actions { margin-top: 20px; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: radial-gradient(circle at top, #123456, #06101b);
+      color: #f4f8ff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      width: 100%;
+      max-width: 520px;
+      background: rgba(10, 24, 40, 0.92);
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+    }
+    h1 {
+      text-align: center;
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+    .subtitle {
+      text-align: center;
+      color: #9ecbff;
+      margin-bottom: 24px;
+      font-size: 0.95rem;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      margin-bottom: 6px;
+      color: #9ecbff;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(255, 255, 255, 0.08);
+      color: #f4f8ff;
+      font-size: 1rem;
+      margin-bottom: 14px;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #ffd166, #fca311);
+      color: #04101b;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(252, 163, 17, 0.35);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .balance {
+      text-align: center;
+      font-size: 1.3rem;
+      margin: 18px 0;
+    }
+    .games {
+      display: grid;
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .status {
+      min-height: 1.2em;
+      text-align: center;
+      margin-top: 18px;
+      color: #8be9fd;
+    }
+    .status.error {
+      color: #ff6b6b;
+    }
+    .actions {
+      margin-top: 20px;
+      display: grid;
+      gap: 12px;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Casino Lobby</h1>
-    <label for="username">Enter Username</label>
-    <input type="text" id="username" placeholder="e.g. luckyplayer" />
-    <button id="loadBtn">Load Profile</button>
+  <div class="card">
+    <h1>Lucky Stripe Arcade</h1>
+    <div class="subtitle">Load your profile, then dive into the games.</div>
+    <label for="usernameInput">Username</label>
+    <input type="text" id="usernameInput" placeholder="e.g. luckyplayer" autocomplete="off" />
+    <button id="loadProfileBtn">Load Profile</button>
     <div class="balance" id="balanceDisplay">Balance: -- credits</div>
     <div class="games">
-      <button data-game="slots" disabled>Play Slots</button>
-      <button data-game="highlow" disabled>Play High / Low</button>
-      <button data-game="coinflip" disabled>Play Coin Flip</button>
+      <button data-target="slots.html" disabled>Slots</button>
+      <button data-target="highlow.html" disabled>High / Low</button>
+      <button data-target="coinflip.html" disabled>Coin Flip</button>
+      <button id="adminBtn" data-target="admin.html">Admin Dashboard</button>
     </div>
     <div class="actions">
-      <button id="saveBtn" disabled>Save &amp; Exit</button>
+      <button id="saveExitBtn" disabled>Save &amp; Exit</button>
     </div>
-    <div class="status" id="status"></div>
+    <div class="status" id="statusMessage"></div>
   </div>
   <script>
-    const statusEl = document.getElementById('status');
+    const usernameInput = document.getElementById('usernameInput');
+    const loadBtn = document.getElementById('loadProfileBtn');
+    const saveBtn = document.getElementById('saveExitBtn');
     const balanceDisplay = document.getElementById('balanceDisplay');
-    const loadBtn = document.getElementById('loadBtn');
-    const saveBtn = document.getElementById('saveBtn');
-    const gameButtons = document.querySelectorAll('.games button');
-    const usernameInput = document.getElementById('username');
+    const statusMessage = document.getElementById('statusMessage');
+    const gameButtons = Array.from(document.querySelectorAll('.games button'));
+
     let currentUser = null;
     let currentBalance = 0;
 
     function setStatus(message, isError = false) {
-      statusEl.textContent = message || '';
-      statusEl.style.color = isError ? '#ff6b6b' : '#9be7ff';
+      statusMessage.textContent = message || '';
+      statusMessage.classList.toggle('error', isError);
     }
 
     function updateBalanceDisplay() {
-      if (currentUser) {
-        balanceDisplay.textContent = `Balance: ${currentBalance} credits`;
-      } else {
-        balanceDisplay.textContent = 'Balance: -- credits';
-      }
+      balanceDisplay.textContent = currentUser
+        ? `Balance: ${currentBalance} credits`
+        : 'Balance: -- credits';
     }
 
-    function setButtonsEnabled(enabled) {
-      gameButtons.forEach(btn => btn.disabled = !enabled);
+    function setControlsEnabled(enabled) {
+      gameButtons.forEach(btn => {
+        if (btn.id === 'adminBtn') {
+          btn.disabled = false;
+        } else {
+          btn.disabled = !enabled;
+        }
+      });
       saveBtn.disabled = !enabled;
     }
 
@@ -68,8 +154,8 @@
         setStatus('Please enter a username.', true);
         return;
       }
+      setStatus('Loading profile...');
       try {
-        setStatus('Loading profile...');
         const resp = await fetch(`/api/profile?username=${encodeURIComponent(trimmed)}`);
         const data = await resp.json();
         if (!data.ok) {
@@ -77,23 +163,20 @@
         }
         currentUser = data.username;
         currentBalance = data.balance;
+        usernameInput.value = currentUser;
         updateBalanceDisplay();
-        setButtonsEnabled(true);
-        setStatus(`Welcome back, ${currentUser}!`);
+        setControlsEnabled(true);
+        setStatus(`Welcome, ${currentUser}!`);
       } catch (err) {
         console.error(err);
-        setStatus('Error loading profile.', true);
+        setStatus('Unable to load profile.', true);
       }
     }
 
-    loadBtn.addEventListener('click', () => {
-      loadProfile(usernameInput.value);
-    });
-
-    saveBtn.addEventListener('click', async () => {
+    async function saveAndStay() {
       if (!currentUser) return;
+      setStatus('Saving profile...');
       try {
-        setStatus('Saving profile...');
         const resp = await fetch('/api/profile/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -101,20 +184,30 @@
         });
         const data = await resp.json();
         if (!data.ok) {
-          throw new Error(data.error || 'Failed to save');
+          throw new Error(data.error || 'Save failed');
         }
         setStatus('Profile saved.');
       } catch (err) {
         console.error(err);
-        setStatus('Error saving profile.', true);
+        setStatus('Unable to save profile.', true);
       }
+    }
+
+    loadBtn.addEventListener('click', () => {
+      loadProfile(usernameInput.value);
     });
+
+    saveBtn.addEventListener('click', saveAndStay);
 
     gameButtons.forEach(btn => {
       btn.addEventListener('click', () => {
+        if (btn.dataset.target === 'admin.html') {
+          window.location.href = 'admin.html';
+          return;
+        }
         if (!currentUser) return;
-        const game = btn.getAttribute('data-game');
-        window.location.href = `${game}.html?u=${encodeURIComponent(currentUser)}`;
+        const target = btn.dataset.target;
+        window.location.href = `${target}?u=${encodeURIComponent(currentUser)}`;
       });
     });
 
