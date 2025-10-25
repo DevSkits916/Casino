@@ -2,113 +2,294 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Slot Machine</title>
+  <title>Slots</title>
   <style>
-    body { font-family: 'Trebuchet MS', sans-serif; background: #1b2735; color: #f7f7f7; margin: 0; padding: 20px; }
-    .container { max-width: 700px; margin: 0 auto; background: #24354b; padding: 20px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
-    h1 { text-align: center; margin-bottom: 10px; }
-    .info { text-align: center; margin-bottom: 20px; }
-    .reels { display: flex; justify-content: center; gap: 20px; font-size: 3rem; margin: 20px 0; }
-    .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-    label { display: block; margin-bottom: 4px; }
-    input { padding: 8px; border-radius: 6px; border: none; width: 100%; }
-    button { grid-column: span 2; padding: 12px; border: none; border-radius: 6px; background: #ffcc00; color: #222; font-weight: bold; cursor: pointer; }
-    button:disabled { background: #777; cursor: not-allowed; }
-    .result { text-align: center; min-height: 1.5em; margin-top: 20px; }
-    .back { margin-top: 20px; text-align: center; }
-    .back a { color: #9be7ff; text-decoration: none; font-weight: bold; }
-    .error { color: #ff6b6b; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      background: radial-gradient(circle at center, #2a1746, #05030a);
+      color: #f3f0ff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .panel {
+      width: 100%;
+      max-width: 760px;
+      background: rgba(18, 12, 32, 0.92);
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 20px 36px rgba(0, 0, 0, 0.45);
+    }
+    h1 {
+      margin: 0 0 6px;
+      text-align: center;
+    }
+    .info {
+      text-align: center;
+      color: #a7b7ff;
+      margin-bottom: 18px;
+    }
+    .balance {
+      font-size: 1.25rem;
+      margin-top: 4px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 24px 0;
+    }
+    .cell {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 26px 0;
+      font-size: 2.8rem;
+      text-align: center;
+      box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.45);
+    }
+    label {
+      font-size: 0.85rem;
+      color: #a7b7ff;
+      display: block;
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(255, 255, 255, 0.1);
+      color: #f3f0ff;
+      font-size: 1rem;
+      margin-bottom: 12px;
+    }
+    button {
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, #ff9f1c, #ff5714);
+      color: #1a102e;
+      font-weight: bold;
+      font-size: 1rem;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 6px;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(255, 87, 20, 0.35);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 20px;
+      align-items: end;
+    }
+    .result {
+      min-height: 1.4em;
+      text-align: center;
+      margin-top: 18px;
+      color: #9cf6ff;
+    }
+    .result.error {
+      color: #ff6b6b;
+    }
+    .footer-actions {
+      margin-top: 26px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+    }
+    .hidden {
+      display: none !important;
+    }
+    .gate {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .gate input {
+      max-width: 220px;
+      margin: 0 auto 12px;
+      display: block;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Slot Machine</h1>
-    <div class="info">
-      <div id="playerInfo">Loading...</div>
-      <div id="balance">Balance: --</div>
+  <div class="panel">
+    <h1>Triple Spin Slots</h1>
+    <div class="gate" id="gate">
+      <p>Enter your username to load your wallet.</p>
+      <input type="text" id="gateUsername" placeholder="Username" autocomplete="off" />
+      <button id="gateLoadBtn">Load Profile</button>
+      <div class="result" id="gateStatus"></div>
     </div>
-    <div class="reels" id="reels">
-      <div>❔</div>
-      <div>❔</div>
-      <div>❔</div>
-    </div>
-    <div class="controls">
-      <div>
-        <label for="betPerLine">Bet per Line</label>
-        <input type="number" id="betPerLine" min="1" value="10" />
+    <div id="game" class="hidden">
+      <div class="info">
+        <div id="playerLabel">Player: --</div>
+        <div class="balance" id="balanceLabel">Balance: -- credits</div>
       </div>
-      <div>
-        <label for="lines">Number of Lines</label>
-        <input type="number" id="lines" min="1" max="5" value="1" />
+      <div class="grid" id="board"></div>
+      <div class="controls">
+        <div>
+          <label for="betPerLine">Bet per Line</label>
+          <input type="number" id="betPerLine" min="1" value="10" />
+        </div>
+        <div>
+          <label for="lineCount">Number of Lines (1-5)</label>
+          <input type="number" id="lineCount" min="1" max="5" value="1" />
+        </div>
+        <div>
+          <button id="spinBtn" disabled>Spin</button>
+        </div>
       </div>
-      <button id="spinBtn" disabled>Spin</button>
+      <div class="result" id="resultMessage"></div>
+      <div class="footer-actions">
+        <button id="backBtn">Save &amp; Back to Lobby</button>
+      </div>
     </div>
-    <div class="result" id="result"></div>
-    <div class="back"><a id="backLink" href="lobby.html">Back to Lobby</a></div>
   </div>
   <script>
-    const params = new URLSearchParams(window.location.search);
-    const username = params.get('u');
-    const playerInfo = document.getElementById('playerInfo');
-    const balanceEl = document.getElementById('balance');
-    const reelsEl = document.getElementById('reels');
-    const resultEl = document.getElementById('result');
-    const spinBtn = document.getElementById('spinBtn');
+    const symbols = ["7", "💎", "🍋", "🍒", "🍉", "🔔"];
+    const gate = document.getElementById('gate');
+    const gameSection = document.getElementById('game');
+    const gateInput = document.getElementById('gateUsername');
+    const gateLoadBtn = document.getElementById('gateLoadBtn');
+    const gateStatus = document.getElementById('gateStatus');
+    const playerLabel = document.getElementById('playerLabel');
+    const balanceLabel = document.getElementById('balanceLabel');
+    const boardEl = document.getElementById('board');
     const betInput = document.getElementById('betPerLine');
-    const linesInput = document.getElementById('lines');
+    const lineInput = document.getElementById('lineCount');
+    const spinBtn = document.getElementById('spinBtn');
+    const resultMessage = document.getElementById('resultMessage');
+    const backBtn = document.getElementById('backBtn');
 
-    const symbols = ['🍒', '🍋', '🔔', '⭐', '7'];
-    let balance = 0;
+    const state = {
+      username: null,
+      balance: 0,
+    };
 
-    if (!username) {
-      window.location.replace('lobby.html');
-    } else {
-      document.getElementById('backLink').href = `lobby.html?u=${encodeURIComponent(username)}`;
-      loadProfile();
+    function setGateStatus(message, isError = false) {
+      gateStatus.textContent = message || '';
+      gateStatus.classList.toggle('error', isError);
     }
 
-    async function loadProfile() {
-      try {
-        const resp = await fetch(`/api/profile?username=${encodeURIComponent(username)}`);
-        const data = await resp.json();
-        if (!data.ok) {
-          throw new Error(data.error || 'Failed to load profile');
-        }
-        balance = data.balance;
-        playerInfo.textContent = `Player: ${data.username}`;
-        updateBalance();
-        spinBtn.disabled = false;
-      } catch (err) {
-        console.error(err);
-        playerInfo.innerHTML = '<span class="error">Unable to load profile.</span>';
-      }
+    function setResult(message, isError = false) {
+      resultMessage.textContent = message || '';
+      resultMessage.classList.toggle('error', isError);
     }
 
     function updateBalance() {
-      balanceEl.textContent = `Balance: ${balance} credits`;
+      balanceLabel.textContent = `Balance: ${state.balance} credits`;
+    }
+
+    function renderBoard(grid) {
+      boardEl.innerHTML = '';
+      grid.flat().forEach(symbol => {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.textContent = symbol;
+        boardEl.appendChild(cell);
+      });
     }
 
     function randomSymbol() {
       return symbols[Math.floor(Math.random() * symbols.length)];
     }
 
-    function evaluatePayout(reelValues, totalBet) {
-      const [a, b, c] = reelValues;
-      if (a === b && b === c) {
-        if (a === '7') return totalBet * 5;
-        return totalBet * 3;
+    function generateBoard() {
+      const grid = [];
+      for (let r = 0; r < 3; r++) {
+        const row = [];
+        for (let c = 0; c < 3; c++) {
+          row.push(randomSymbol());
+        }
+        grid.push(row);
       }
+      return grid;
+    }
+
+      function linePayout(line, betPerLine) {
+        const [a, b, c] = line;
+        if (a === b && b === c) {
+          if (a === "7" || a === "💎") {
+            return betPerLine * 20;
+          }
+          if (a === "🍋") {
+            return betPerLine * 10;
+          }
+          if (a === "🍒") {
+            return betPerLine * 5;
+          }
+          return 0;
+        }
       if (a === b || b === c || a === c) {
-        return Math.floor(totalBet * 1.5);
+        return betPerLine * 2;
       }
       return 0;
+    }
+
+    function calculatePayout(board, betPerLine, lineCount) {
+      const lines = [
+        board[0],
+        board[1],
+        board[2],
+        [board[0][0], board[1][1], board[2][2]],
+        [board[2][0], board[1][1], board[0][2]],
+      ];
+      let payout = 0;
+      for (let i = 0; i < Math.min(lineCount, lines.length); i++) {
+        payout += linePayout(lines[i], betPerLine);
+      }
+      return payout;
+    }
+
+    async function loadProfile(username) {
+      const trimmed = (username || '').trim();
+      if (!trimmed) {
+        setGateStatus('Please enter a username.', true);
+        return;
+      }
+      setGateStatus('Loading...');
+      try {
+        const resp = await fetch(`/api/profile?username=${encodeURIComponent(trimmed)}`);
+        const data = await resp.json();
+        if (!data.ok) {
+          throw new Error(data.error || 'Failed to load profile');
+        }
+        state.username = data.username;
+        state.balance = data.balance;
+        playerLabel.textContent = `Player: ${state.username}`;
+        updateBalance();
+        gate.classList.add('hidden');
+        gameSection.classList.remove('hidden');
+        renderBoard([
+          ["❔", "❔", "❔"],
+          ["❔", "❔", "❔"],
+          ["❔", "❔", "❔"],
+        ]);
+        spinBtn.disabled = false;
+        setResult('Ready to spin!');
+      } catch (err) {
+        console.error(err);
+        setGateStatus('Unable to load profile.', true);
+      }
     }
 
     async function charge(amount, desc) {
       const resp = await fetch('/api/game/charge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, game: 'slots', amount, desc })
+        body: JSON.stringify({ username: state.username, game: 'slots', amount, desc })
       });
       return resp.json();
     }
@@ -117,67 +298,87 @@
       const resp = await fetch('/api/game/payout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, game: 'slots', amount, desc })
+        body: JSON.stringify({ username: state.username, game: 'slots', amount, desc })
       });
       return resp.json();
     }
 
+    gateLoadBtn.addEventListener('click', () => loadProfile(gateInput.value));
+
     spinBtn.addEventListener('click', async () => {
-      const betPerLine = parseInt(betInput.value, 10) || 0;
-      const lines = parseInt(linesInput.value, 10) || 0;
-      const totalBet = betPerLine * lines;
-
-      if (betPerLine <= 0 || lines <= 0) {
-        resultEl.innerHTML = '<span class="error">Please enter valid bet and lines.</span>';
+      const betPerLine = Math.max(0, Math.floor(parseInt(betInput.value, 10)) || 0);
+      const lineCount = Math.max(0, Math.floor(parseInt(lineInput.value, 10)) || 0);
+      if (betPerLine <= 0 || lineCount <= 0 || lineCount > 5) {
+        setResult('Enter a valid bet and number of lines (1-5).', true);
         return;
       }
-      if (totalBet > balance) {
-        resultEl.innerHTML = '<span class="error">Not enough credits for that spin.</span>';
+      const totalCost = betPerLine * lineCount;
+      if (totalCost > state.balance) {
+        setResult('Insufficient credits for that spin.', true);
         return;
       }
-
       spinBtn.disabled = true;
-      resultEl.textContent = 'Spinning...';
-
+      setResult('Spinning...');
       try {
-        const chargeResp = await charge(totalBet, `bet ${totalBet} credits on ${lines} lines`);
+        const chargeResp = await charge(totalCost, `bet ${betPerLine} on ${lineCount} line(s)`);
         if (!chargeResp.ok) {
           if (chargeResp.error === 'INSUFFICIENT_FUNDS') {
-            balance = chargeResp.balance;
+            state.balance = chargeResp.balance;
             updateBalance();
-            resultEl.innerHTML = '<span class="error">Insufficient funds.</span>';
+            setResult('Insufficient credits.', true);
           } else {
-            resultEl.innerHTML = '<span class="error">Charge failed.</span>';
+            setResult('Charge failed.', true);
           }
-          spinBtn.disabled = false;
           return;
         }
-        balance = chargeResp.balance;
+        state.balance = chargeResp.balance;
         updateBalance();
 
-        const reelValues = [randomSymbol(), randomSymbol(), randomSymbol()];
-        reelsEl.innerHTML = reelValues.map(v => `<div>${v}</div>`).join('');
-
-        const winnings = evaluatePayout(reelValues, totalBet);
-        if (winnings > 0) {
-          const payoutResp = await payout(winnings, `payout ${winnings} credits for ${reelValues.join(' ')}`);
+        const board = generateBoard();
+        renderBoard(board);
+        const payoutAmount = calculatePayout(board, betPerLine, lineCount);
+        if (payoutAmount > 0) {
+          const payoutResp = await payout(payoutAmount, 'slots payout');
           if (payoutResp.ok) {
-            balance = payoutResp.balance;
+            state.balance = payoutResp.balance;
             updateBalance();
-            resultEl.textContent = `You won ${winnings} credits!`;
+            setResult(`WIN +${payoutAmount} credits!`);
           } else {
-            resultEl.innerHTML = '<span class="error">Payout failed.</span>';
+            setResult('Payout failed.', true);
           }
         } else {
-          resultEl.textContent = `Lost ${totalBet} credits.`;
+          setResult(`LOSE -${totalCost} credits.`);
         }
       } catch (err) {
         console.error(err);
-        resultEl.innerHTML = '<span class="error">An error occurred.</span>';
+        setResult('An error occurred.', true);
       } finally {
         spinBtn.disabled = false;
       }
     });
+
+    backBtn.addEventListener('click', async () => {
+      if (!state.username) return;
+      backBtn.disabled = true;
+      try {
+        await fetch('/api/profile/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: state.username, balance: state.balance })
+        });
+      } catch (err) {
+        console.error(err);
+      } finally {
+        window.location.href = `lobby.html?u=${encodeURIComponent(state.username)}`;
+      }
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    const presetUser = params.get('u');
+    if (presetUser) {
+      gateInput.value = presetUser;
+      loadProfile(presetUser);
+    }
   </script>
 </body>
 </html>
