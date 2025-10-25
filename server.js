@@ -1,22 +1,19 @@
-const express = require('express');
-const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
+const express = require("express");
+const fs = require("fs");
+const path = require("path");
+const cors = require("cors");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
 
-const DEFAULT_DATA_FILE = path.join(__dirname, 'balances.json');
-const DATA_FILE = (() => {
-  const configured = process.env.DATA_FILE;
-  if (!configured) {
-    return DEFAULT_DATA_FILE;
-  }
-  return path.isAbsolute(configured)
-    ? configured
-    : path.join(__dirname, configured);
-})();
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "lobby.html"));
+});
+
+const DATA_FILE = path.join(__dirname, "balances.json");
+const DEFAULT_STARTING_BALANCE = 1000;
 
 function ensureDataDirectory() {
   const dir = path.dirname(DATA_FILE);
@@ -29,44 +26,24 @@ function loadData() {
   ensureDataDirectory();
   if (!fs.existsSync(DATA_FILE)) {
     const initial = { players: {} };
-    fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2));
+    saveData(initial);
     return initial;
   }
-  const raw = fs.readFileSync(DATA_FILE, 'utf-8');
   try {
+    const raw = fs.readFileSync(DATA_FILE, "utf-8");
     const parsed = JSON.parse(raw);
-    if (!parsed.players || typeof parsed.players !== 'object') {
+    if (!parsed.players || typeof parsed.players !== "object") {
       return { players: {} };
     }
     return parsed;
   } catch (err) {
-    console.error('Failed to parse balances.json, resetting.', err);
     return { players: {} };
   }
 }
 
-let data = loadData();
-
-console.log(`Using balance data file at ${DATA_FILE}`);
-
-function saveData() {
+function saveData(data) {
   ensureDataDirectory();
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-}
-
-function ensureUser(username) {
-  if (!username) {
-    throw new Error('USERNAME_REQUIRED');
-  }
-  if (!data.players[username]) {
-    data.players[username] = {
-      balance: 1000,
-      history: []
-    };
-    data.players[username].history.push(makeHistoryEntry('system', 0, 'auto-create profile'));
-    saveData();
-  }
-  return data.players[username];
 }
 
 function makeHistoryEntry(game, delta, desc) {
@@ -74,160 +51,197 @@ function makeHistoryEntry(game, delta, desc) {
     ts: new Date().toISOString(),
     game,
     delta,
-    desc
+    desc,
   };
 }
 
-app.use(express.static(path.join(__dirname, 'public')));
+function getOrCreateUser(data, username) {
+  if (!username) {
+    throw new Error("USERNAME_REQUIRED");
+  }
+  if (!data.players[username]) {
+    data.players[username] = {
+      balance: DEFAULT_STARTING_BALANCE,
+      history: [
+        {
+          ts: new Date().toISOString(),
+          game: "seed",
+          delta: 0,
+          desc: "initial seed",
+        },
+      ],
+    };
+    saveData(data);
+  }
+  return data.players[username];
+}
 
-app.get('/api/profile', (req, res) => {
+app.get("/api/profile", (req, res) => {
   try {
-    const username = (req.query.username || '').trim();
-    const user = ensureUser(username);
-    saveData();
+    const username = (req.query.username || "").trim();
+    const data = loadData();
+    const user = getOrCreateUser(data, username);
+    saveData(data);
     res.json({ ok: true, username, balance: user.balance });
   } catch (err) {
-    if (err.message === 'USERNAME_REQUIRED') {
-      res.status(400).json({ ok: false, error: 'USERNAME_REQUIRED' });
+    if (err.message === "USERNAME_REQUIRED") {
+      res.status(400).json({ ok: false, error: "USERNAME_REQUIRED" });
     } else {
       console.error(err);
-      res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+      res.status(500).json({ ok: false, error: "SERVER_ERROR" });
     }
   }
 });
 
-app.post('/api/profile/save', (req, res) => {
+app.post("/api/profile/save", (req, res) => {
   try {
     const { username, balance } = req.body || {};
-    const name = (username || '').trim();
-    const user = ensureUser(name);
-    const newBalance = Number.isFinite(balance) ? Math.max(0, Math.floor(balance)) : user.balance;
+    const name = (username || "").trim();
+    const data = loadData();
+    const user = getOrCreateUser(data, name);
+    const newBalance = Number.isFinite(balance)
+      ? Math.max(0, Math.floor(balance))
+      : user.balance;
     user.balance = newBalance;
-    user.history.push(makeHistoryEntry('manual-save', 0, 'session save'));
-    saveData();
+    user.history.push(makeHistoryEntry("manual-save", 0, "session save"));
+    saveData(data);
     res.json({ ok: true });
   } catch (err) {
-    if (err.message === 'USERNAME_REQUIRED') {
-      res.status(400).json({ ok: false, error: 'USERNAME_REQUIRED' });
+    if (err.message === "USERNAME_REQUIRED") {
+      res.status(400).json({ ok: false, error: "USERNAME_REQUIRED" });
     } else {
       console.error(err);
-      res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+      res.status(500).json({ ok: false, error: "SERVER_ERROR" });
     }
   }
 });
 
-app.post('/api/game/charge', (req, res) => {
+app.post("/api/game/charge", (req, res) => {
   try {
     const { username, game, amount, desc } = req.body || {};
-    const name = (username || '').trim();
+    const name = (username || "").trim();
+    const data = loadData();
+    const user = getOrCreateUser(data, name);
     const wager = Number.isFinite(amount) ? Math.max(0, Math.floor(amount)) : 0;
     if (wager <= 0) {
-      return res.status(400).json({ ok: false, error: 'INVALID_AMOUNT' });
+      return res.status(400).json({ ok: false, error: "INVALID_AMOUNT" });
     }
-    const user = ensureUser(name);
-    if (user.balance - wager < 0) {
-      return res.status(200).json({ ok: false, error: 'INSUFFICIENT_FUNDS', balance: user.balance });
+    if (user.balance < wager) {
+      return res.json({ ok: false, error: "INSUFFICIENT_FUNDS", balance: user.balance });
     }
     user.balance -= wager;
-    user.history.push(makeHistoryEntry(game || 'unknown-game', -wager, desc || 'charge'));
-    saveData();
+    user.history.push(
+      makeHistoryEntry(game || "unknown-game", -wager, desc || "charge")
+    );
+    saveData(data);
     res.json({ ok: true, balance: user.balance });
   } catch (err) {
-    if (err.message === 'USERNAME_REQUIRED') {
-      res.status(400).json({ ok: false, error: 'USERNAME_REQUIRED' });
+    if (err.message === "USERNAME_REQUIRED") {
+      res.status(400).json({ ok: false, error: "USERNAME_REQUIRED" });
     } else {
       console.error(err);
-      res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+      res.status(500).json({ ok: false, error: "SERVER_ERROR" });
     }
   }
 });
 
-app.post('/api/game/payout', (req, res) => {
+app.post("/api/game/payout", (req, res) => {
   try {
     const { username, game, amount, desc } = req.body || {};
-    const name = (username || '').trim();
+    const name = (username || "").trim();
+    const data = loadData();
+    const user = getOrCreateUser(data, name);
     const payout = Number.isFinite(amount) ? Math.max(0, Math.floor(amount)) : 0;
-    if (payout < 0) {
-      return res.status(400).json({ ok: false, error: 'INVALID_AMOUNT' });
-    }
-    const user = ensureUser(name);
     user.balance += payout;
-    user.history.push(makeHistoryEntry(game || 'unknown-game', payout, desc || 'payout'));
-    saveData();
+    user.history.push(
+      makeHistoryEntry(game || "unknown-game", payout, desc || "payout")
+    );
+    saveData(data);
     res.json({ ok: true, balance: user.balance });
   } catch (err) {
-    if (err.message === 'USERNAME_REQUIRED') {
-      res.status(400).json({ ok: false, error: 'USERNAME_REQUIRED' });
+    if (err.message === "USERNAME_REQUIRED") {
+      res.status(400).json({ ok: false, error: "USERNAME_REQUIRED" });
     } else {
       console.error(err);
-      res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+      res.status(500).json({ ok: false, error: "SERVER_ERROR" });
     }
   }
 });
 
-app.get('/api/admin/users', (req, res) => {
+app.get("/api/admin/users", (req, res) => {
+  const data = loadData();
   const users = Object.entries(data.players).map(([username, info]) => ({
     username,
-    balance: info.balance
+    balance: info.balance,
   }));
   res.json({ ok: true, users });
 });
 
-app.get('/api/admin/user-detail', (req, res) => {
+app.get("/api/admin/user-detail", (req, res) => {
   try {
-    const username = (req.query.username || '').trim();
-    const user = ensureUser(username);
+    const username = (req.query.username || "").trim();
+    if (!username) {
+      throw new Error("USERNAME_REQUIRED");
+    }
+    const data = loadData();
+    const user = data.players[username];
+    if (!user) {
+      return res.json({ ok: false, error: "NO_SUCH_USER" });
+    }
     res.json({ ok: true, username, balance: user.balance, history: user.history });
   } catch (err) {
-    if (err.message === 'USERNAME_REQUIRED') {
-      res.status(400).json({ ok: false, error: 'USERNAME_REQUIRED' });
+    if (err.message === "USERNAME_REQUIRED") {
+      res.status(400).json({ ok: false, error: "USERNAME_REQUIRED" });
     } else {
       console.error(err);
-      res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+      res.status(500).json({ ok: false, error: "SERVER_ERROR" });
     }
   }
 });
 
-app.post('/api/admin/set-balance', (req, res) => {
+app.post("/api/admin/set-balance", (req, res) => {
   try {
     const { username, balance, note } = req.body || {};
-    const name = (username || '').trim();
-    const targetBalance = Number.isFinite(balance) ? Math.max(0, Math.floor(balance)) : 0;
-    const user = ensureUser(name);
-    const old = user.balance;
-    user.balance = targetBalance;
-    const delta = targetBalance - old;
-    user.history.push(makeHistoryEntry('admin-adjust', delta, note || 'admin set balance'));
-    saveData();
+    const name = (username || "").trim();
+    const data = loadData();
+    const user = getOrCreateUser(data, name);
+    const newBalance = Number.isFinite(balance) ? Math.max(0, Math.floor(balance)) : 0;
+    const delta = newBalance - user.balance;
+    user.balance = newBalance;
+    user.history.push(
+      makeHistoryEntry("admin-adjust", delta, note || "admin set balance")
+    );
+    saveData(data);
     res.json({ ok: true, balance: user.balance });
   } catch (err) {
-    if (err.message === 'USERNAME_REQUIRED') {
-      res.status(400).json({ ok: false, error: 'USERNAME_REQUIRED' });
+    if (err.message === "USERNAME_REQUIRED") {
+      res.status(400).json({ ok: false, error: "USERNAME_REQUIRED" });
     } else {
       console.error(err);
-      res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+      res.status(500).json({ ok: false, error: "SERVER_ERROR" });
     }
   }
 });
 
-app.post('/api/admin/delete-user', (req, res) => {
+app.post("/api/admin/delete-user", (req, res) => {
   try {
     const { username } = req.body || {};
-    const name = (username || '').trim();
+    const name = (username || "").trim();
     if (!name) {
-      throw new Error('USERNAME_REQUIRED');
+      throw new Error("USERNAME_REQUIRED");
     }
+    const data = loadData();
     if (data.players[name]) {
       delete data.players[name];
-      saveData();
+      saveData(data);
     }
     res.json({ ok: true });
   } catch (err) {
-    if (err.message === 'USERNAME_REQUIRED') {
-      res.status(400).json({ ok: false, error: 'USERNAME_REQUIRED' });
+    if (err.message === "USERNAME_REQUIRED") {
+      res.status(400).json({ ok: false, error: "USERNAME_REQUIRED" });
     } else {
       console.error(err);
-      res.status(500).json({ ok: false, error: 'SERVER_ERROR' });
+      res.status(500).json({ ok: false, error: "SERVER_ERROR" });
     }
   }
 });

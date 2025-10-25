@@ -4,21 +4,123 @@
   <meta charset="UTF-8" />
   <title>Admin Dashboard</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #0f1e2f; color: #f4f4f4; margin: 0; padding: 20px; }
-    h1 { text-align: center; }
-    .layout { display: flex; gap: 20px; }
-    .panel { flex: 1; background: #172c44; padding: 20px; border-radius: 8px; box-shadow: 0 0 12px rgba(0,0,0,0.4); }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-    tr:hover { background: rgba(255,255,255,0.05); cursor: pointer; }
-    .history { max-height: 400px; overflow-y: auto; }
-    .history-entry { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
-    .controls { margin-top: 15px; display: grid; gap: 10px; }
-    input, textarea { padding: 8px; border-radius: 4px; border: none; }
-    button { padding: 10px; border: none; border-radius: 4px; background: #ffb347; color: #0f1e2f; font-weight: bold; cursor: pointer; }
-    button:disabled { background: #555; cursor: not-allowed; }
-    .status { margin-top: 10px; min-height: 1.4em; }
-    .error { color: #ff6b6b; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: radial-gradient(circle at top, #06162b, #020910 70%);
+      color: #f2f7ff;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .layout {
+      display: grid;
+      gap: 20px;
+      grid-template-columns: minmax(280px, 1fr) minmax(380px, 2fr);
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .panel {
+      background: rgba(15, 30, 48, 0.92);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 18px 32px rgba(0, 0, 0, 0.45);
+    }
+    .panel h2 {
+      margin-top: 0;
+      margin-bottom: 16px;
+      font-size: 1.2rem;
+      color: #9ed0ff;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    th {
+      text-align: left;
+      font-weight: 600;
+      color: #c1dcff;
+    }
+    tbody tr {
+      cursor: pointer;
+      transition: background 0.1s ease;
+    }
+    tbody tr:hover,
+    tbody tr.selected {
+      background: rgba(158, 208, 255, 0.12);
+    }
+    button {
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 16px rgba(158, 208, 255, 0.25);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .refresh-btn {
+      background: linear-gradient(135deg, #4cc9f0, #4895ef);
+      color: #04152a;
+      margin-bottom: 12px;
+      width: 100%;
+    }
+    .danger {
+      background: linear-gradient(135deg, #ff6b6b, #d62828);
+      color: #fff;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(255, 255, 255, 0.08);
+      color: #f2f7ff;
+      font-size: 1rem;
+      margin-bottom: 12px;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+    .history {
+      max-height: 360px;
+      overflow-y: auto;
+      border-radius: 12px;
+      background: rgba(3, 10, 19, 0.6);
+      padding: 12px;
+    }
+    .history-entry {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 10px 0;
+    }
+    .history-entry:last-child {
+      border-bottom: none;
+    }
+    .history-entry strong {
+      color: #ffd166;
+    }
+    .status {
+      min-height: 1.3em;
+      margin-top: 8px;
+      color: #8be9fd;
+    }
+    .status.error {
+      color: #ff6b6b;
+    }
   </style>
 </head>
 <body>
@@ -26,24 +128,27 @@
   <div class="layout">
     <div class="panel">
       <h2>Users</h2>
-      <table id="usersTable">
+      <button class="refresh-btn" id="refreshBtn">Refresh List</button>
+      <table>
         <thead>
           <tr><th>Username</th><th>Balance</th></tr>
         </thead>
-        <tbody></tbody>
+        <tbody id="usersBody"></tbody>
       </table>
     </div>
-    <div class="panel" id="detailPanel">
+    <div class="panel">
       <h2>User Detail</h2>
-      <div id="detailContent">Select a user to view details.</div>
+      <div id="detailContent">Select a user to see balance and history.</div>
     </div>
   </div>
   <script>
-    const usersTableBody = document.querySelector('#usersTable tbody');
+    const usersBody = document.getElementById('usersBody');
     const detailContent = document.getElementById('detailContent');
+    const refreshBtn = document.getElementById('refreshBtn');
     let selectedUser = null;
 
     async function fetchUsers() {
+      usersBody.innerHTML = '<tr><td colspan="2">Loading...</td></tr>';
       try {
         const resp = await fetch('/api/admin/users');
         const data = await resp.json();
@@ -51,41 +156,53 @@
         renderUsers(data.users);
       } catch (err) {
         console.error(err);
-        usersTableBody.innerHTML = '<tr><td colspan="2" class="error">Unable to load users.</td></tr>';
+        usersBody.innerHTML = '<tr><td colspan="2" style="color:#ff6b6b;">Unable to load users.</td></tr>';
       }
     }
 
     function renderUsers(users) {
-      usersTableBody.innerHTML = '';
+      usersBody.innerHTML = '';
+      if (!users.length) {
+        usersBody.innerHTML = '<tr><td colspan="2">No users yet.</td></tr>';
+        return;
+      }
       users.forEach(user => {
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${user.username}</td><td>${user.balance}</td>`;
-        tr.addEventListener('click', () => selectUser(user.username));
-        usersTableBody.appendChild(tr);
+        tr.addEventListener('click', () => selectUser(user.username, tr));
+        if (user.username === selectedUser) {
+          tr.classList.add('selected');
+        }
+        usersBody.appendChild(tr);
       });
     }
 
-    async function selectUser(username) {
+    async function selectUser(username, rowEl) {
       selectedUser = username;
-      detailContent.innerHTML = 'Loading...';
+      Array.from(usersBody.children).forEach(row => row.classList.remove('selected'));
+      if (rowEl) rowEl.classList.add('selected');
+      detailContent.innerHTML = 'Loading detail...';
       try {
         const resp = await fetch(`/api/admin/user-detail?username=${encodeURIComponent(username)}`);
         const data = await resp.json();
-        if (!data.ok) throw new Error('Failed to load detail');
+        if (!data.ok) {
+          detailContent.innerHTML = `<div class="status error">${data.error || 'Unable to load detail.'}</div>`;
+          return;
+        }
         renderDetail(data);
       } catch (err) {
         console.error(err);
-        detailContent.innerHTML = '<div class="error">Unable to load detail.</div>';
+        detailContent.innerHTML = '<div class="status error">Unable to load detail.</div>';
       }
     }
 
     function renderDetail(detail) {
-      const historyHtml = detail.history.length
+      const historyHtml = detail.history && detail.history.length
         ? detail.history.slice().reverse().map(entry => `
             <div class="history-entry">
               <div><strong>${entry.game}</strong> (${entry.delta >= 0 ? '+' : ''}${entry.delta})</div>
               <div>${entry.desc}</div>
-              <div style="font-size:0.8em; color:#9be7ff;">${entry.ts}</div>
+              <div style="font-size:0.8rem; color:#9ed0ff;">${entry.ts}</div>
             </div>
           `).join('')
         : '<div>No history yet.</div>';
@@ -93,15 +210,16 @@
       detailContent.innerHTML = `
         <div><strong>Username:</strong> ${detail.username}</div>
         <div><strong>Balance:</strong> ${detail.balance} credits</div>
-        <div class="controls">
-          <label>Set Balance</label>
-          <input type="number" id="balanceInput" value="${detail.balance}" />
-          <textarea id="noteInput" rows="2" placeholder="Adjustment note"></textarea>
-          <button id="setBalanceBtn">Set Balance</button>
-          <button id="deleteUserBtn" style="background:#ff6b6b; color:#fff;">Delete User</button>
+        <div style="margin-top:16px;">
+          <label for="balanceInput">Set Balance</label>
+          <input type="number" id="balanceInput" value="${detail.balance}" min="0" />
+          <label for="noteInput">Note</label>
+          <textarea id="noteInput" placeholder="Adjustment note"></textarea>
+          <button id="setBalanceBtn">Save Balance</button>
+          <button class="danger" id="deleteUserBtn">Delete User</button>
           <div class="status" id="detailStatus"></div>
         </div>
-        <h3>History</h3>
+        <h3 style="margin-top:24px;">History</h3>
         <div class="history">${historyHtml}</div>
       `;
 
@@ -113,17 +231,20 @@
       const balanceInput = document.getElementById('balanceInput');
       const noteInput = document.getElementById('noteInput');
       const statusEl = document.getElementById('detailStatus');
-      const balanceValue = parseInt(balanceInput.value, 10);
-      if (Number.isNaN(balanceValue) || balanceValue < 0) {
-        statusEl.innerHTML = '<span class="error">Enter a valid balance.</span>';
+      const newBalance = parseInt(balanceInput.value, 10);
+      if (!Number.isFinite(newBalance) || newBalance < 0) {
+        statusEl.textContent = '';
+        statusEl.classList.add('error');
+        statusEl.textContent = 'Enter a valid non-negative balance.';
         return;
       }
+      statusEl.classList.remove('error');
+      statusEl.textContent = 'Saving...';
       try {
-        statusEl.textContent = 'Saving...';
         const resp = await fetch('/api/admin/set-balance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: selectedUser, balance: balanceValue, note: noteInput.value })
+          body: JSON.stringify({ username: selectedUser, balance: newBalance, note: noteInput.value })
         });
         const data = await resp.json();
         if (!data.ok) throw new Error('Failed to set balance');
@@ -132,17 +253,20 @@
         selectUser(selectedUser);
       } catch (err) {
         console.error(err);
-        statusEl.innerHTML = '<span class="error">Unable to set balance.</span>';
+        statusEl.classList.add('error');
+        statusEl.textContent = 'Unable to set balance.';
       }
     }
 
     async function onDeleteUser() {
-      if (!confirm('Delete this user? This cannot be undone.')) {
+      if (!selectedUser) return;
+      const statusEl = document.getElementById('detailStatus');
+      if (!confirm(`Delete user "${selectedUser}"? This cannot be undone.`)) {
         return;
       }
-      const statusEl = document.getElementById('detailStatus');
+      statusEl.classList.remove('error');
+      statusEl.textContent = 'Deleting...';
       try {
-        statusEl.textContent = 'Deleting...';
         const resp = await fetch('/api/admin/delete-user', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -151,15 +275,17 @@
         const data = await resp.json();
         if (!data.ok) throw new Error('Failed to delete user');
         statusEl.textContent = 'User deleted.';
+        detailContent.innerHTML = 'Select a user to see balance and history.';
         selectedUser = null;
-        detailContent.innerHTML = 'Select a user to view details.';
         fetchUsers();
       } catch (err) {
         console.error(err);
-        statusEl.innerHTML = '<span class="error">Unable to delete user.</span>';
+        statusEl.classList.add('error');
+        statusEl.textContent = 'Unable to delete user.';
       }
     }
 
+    refreshBtn.addEventListener('click', fetchUsers);
     fetchUsers();
   </script>
 </body>
